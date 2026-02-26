@@ -1,4 +1,4 @@
-import type { AggregatedResult } from '../types.js';
+import type { AggregatedResult } from '../types';
 /**
  * PR에 요약 코멘트와 Blocking 라인 코멘트를 작성한다.
  *

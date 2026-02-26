@@ -1,11 +1,11 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { buildDiffMap } from './git/diff.js';
-import { runTypecheck } from './typecheck/runner.js';
-import { runEslint } from './eslint/runner.js';
-import { aggregate } from './report/aggregator.js';
-import { postComments } from './github/commenter.js';
-import type { Runner } from './types.js';
+import { buildDiffMap } from './git/diff';
+import { runTypecheck } from './typecheck/runner';
+import { runEslint } from './eslint/runner';
+import { aggregate } from './report/aggregator';
+import { postComments } from './github/commenter';
+import type { Runner } from './types';
 
 /**
  * 전체 파이프라인을 오케스트레이션한다.

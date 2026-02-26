@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import type { DiffMap } from '../types.js';
+import type { DiffMap } from '../types';
 
 /** unified diff hunk 헤더: @@ -a,b +c,d @@ — 새 파일 시작 라인(c) 캡처 */
 const HUNK_HEADER_RE = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/;

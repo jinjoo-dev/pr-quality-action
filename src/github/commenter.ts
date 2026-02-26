@@ -1,6 +1,6 @@
 import { getOctokit, context } from '@actions/github';
-import type { AggregatedResult, Finding } from '../types.js';
-import { BOT_MARKER, formatSummary, formatLineComment } from '../report/formatter.js';
+import type { AggregatedResult, Finding } from '../types';
+import { BOT_MARKER, formatSummary, formatLineComment } from '../report/formatter';
 
 type Octokit = ReturnType<typeof getOctokit>;
 

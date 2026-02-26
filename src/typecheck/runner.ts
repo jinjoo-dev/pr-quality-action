@@ -1,7 +1,7 @@
 import ts from 'typescript';
 import path from 'path';
 import { glob } from 'glob';
-import type { DiffMap, Finding } from '../types.js';
+import type { DiffMap, Finding } from '../types';
 
 /**
  * pnpm monorepo 환경을 고려하여 workspace별 tsconfig.json을 모두 탐색한다.

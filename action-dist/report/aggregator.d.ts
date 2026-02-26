@@ -1,4 +1,4 @@
-import type { AggregatedResult, Finding } from '../types.js';
+import type { AggregatedResult, Finding } from '../types';
 /**
  * 여러 runner에서 수집한 Finding 배열을 통합한다.
  *

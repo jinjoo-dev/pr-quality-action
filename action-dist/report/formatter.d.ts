@@ -1,4 +1,4 @@
-import type { AggregatedResult, Finding } from '../types.js';
+import type { AggregatedResult, Finding } from '../types';
 /**
  * 기존 봇 코멘트를 식별하기 위한 HTML 마커.
  * 재실행 시 이 마커가 포함된 코멘트를 찾아 업데이트한다.

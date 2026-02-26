@@ -1,4 +1,4 @@
-import type { DiffMap } from '../types.js';
+import type { DiffMap } from '../types';
 /**
  * git diff --name-only 를 실행하여 변경된 JS/TS 파일 목록을 반환한다.
  * node_modules / dist / build 디렉토리는 제외한다.
