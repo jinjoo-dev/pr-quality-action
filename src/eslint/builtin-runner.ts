@@ -147,7 +147,8 @@ export async function runBuiltinEslint(diffMap: DiffMap): Promise<Finding[]> {
       findings.push({
         tool: 'eslint',
         ruleId: msg.ruleId ?? 'unknown',
-        severity: msg.severity === 2 ? 'BLOCKING' : 'WARNING',
+        // 내장 규칙은 프로젝트 강제 설정이 아니므로 항상 WARNING(권장)으로 처리
+        severity: 'WARNING',
         file: relPath,
         line: msg.line,
         col: msg.column,
