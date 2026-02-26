@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && node --input-type=module -e \"import('./dist/index.js')\" || true",
-    "bundle": "ncc build src/index.ts -o action-dist --source-map --no-cache && echo '{\"type\":\"commonjs\"}' > action-dist/package.json",
+    "bundle": "ncc build src/index.ts -o action-dist --source-map --no-cache && echo '{\"type\":\"commonjs\"}' > action-dist/package.json && cp node_modules/typescript/lib/lib*.d.ts action-dist/",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/**/*.ts"
