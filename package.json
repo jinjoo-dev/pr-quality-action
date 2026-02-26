@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && node --input-type=module -e \"import('./dist/index.js')\" || true",
-    "bundle": "ncc build src/index.ts -o action-dist --source-map --no-cache && echo '{\"type\":\"commonjs\"}' > action-dist/package.json && cp node_modules/typescript/lib/lib*.d.ts action-dist/",
+    "bundle": "rm -rf action-dist && ncc build src/index.ts -o action-dist --source-map --no-cache && echo '{\"type\":\"commonjs\"}' > action-dist/package.json && cp node_modules/typescript/lib/lib*.d.ts action-dist/",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/**/*.ts"
@@ -16,7 +16,6 @@
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "eslint": "^9.0.0",
-    "eslint-plugin-import-x": "^4.16.1",
     "eslint-plugin-promise": "^7.2.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "glob": "^11.0.0",

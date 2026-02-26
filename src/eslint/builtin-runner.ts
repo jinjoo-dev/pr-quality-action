@@ -23,8 +23,6 @@ const reactHooksPlugin = require('eslint-plugin-react-hooks') as AnyPlugin;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const promisePlugin = require('eslint-plugin-promise') as AnyPlugin;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const importXPlugin = require('eslint-plugin-import-x') as AnyPlugin;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const typescriptEslintPlugin = require('@typescript-eslint/eslint-plugin') as AnyPlugin;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const typescriptParser = require('@typescript-eslint/parser') as Linter.Parser;
@@ -33,32 +31,28 @@ const typescriptParser = require('@typescript-eslint/parser') as Linter.Parser;
 function buildBaseConfig(): Linter.Config<Linter.RulesRecord>[] {
   return [
     {
-      plugins: {
-        'react-hooks': reactHooksPlugin,
-        promise: promisePlugin,
-        'import-x': importXPlugin,
-      },
-      rules: {
-        // React Hooks — 잘못된 Hook 호출은 런타임 오류로 직결
-        'react-hooks/rules-of-hooks': 'error',
-        'react-hooks/exhaustive-deps': 'error',
+    plugins: {
+      'react-hooks': reactHooksPlugin,
+      promise: promisePlugin,
+    },
+    rules: {
+      // React Hooks — 잘못된 Hook 호출은 런타임 오류로 직결
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
 
-        // 비동기 실수 — 조용히 씹히는 Promise 오류 방지
-        'no-async-promise-executor': 'error',
+      // 비동기 실수 — 조용히 씹히는 Promise 오류 방지
+      'no-async-promise-executor': 'error',
 
-        // 코드 흐름 — 도달 불가능한 코드, finally 오용
-        'no-unreachable': 'error',
-        'no-unsafe-finally': 'error',
+      // 코드 흐름 — 도달 불가능한 코드, finally 오용
+      'no-unreachable': 'error',
+      'no-unsafe-finally': 'error',
 
-        // 미선언 변수
-        'no-undef': 'error',
+      // 미선언 변수
+      'no-undef': 'error',
 
-        // Promise 체인 — 항상 return 또는 throw
-        'promise/always-return': 'error',
-
-        // 순환 import — warn으로 시작 (모노레포에서 비용이 클 수 있음)
-        'import-x/no-cycle': 'warn',
-      },
+      // Promise 체인 — 항상 return 또는 throw
+      'promise/always-return': 'error',
+    },
     },
   ];
 }
