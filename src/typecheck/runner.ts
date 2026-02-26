@@ -4,6 +4,26 @@ import { glob } from 'glob';
 import type { DiffMap, Finding } from '../types';
 
 /**
+ * deps 미설치 / lib 미설정으로 발생하는 환경 노이즈 진단을 판별한다.
+ *
+ * 필터링 대상:
+ *   TS2307 (non-relative) — Cannot find module 'react' 등 외부 패키지 미설치
+ *   TS7026              — JSX IntrinsicElements 없음 (@types/react 미설치)
+ */
+function isEnvironmentNoise(diag: ts.Diagnostic): boolean {
+  // TS2307: "Cannot find module 'X'" — 로컬 상대 경로('./', '../')는 실제 오류이므로 유지
+  if (diag.code === 2307) {
+    const msg = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
+    return /Cannot find module '(?!\.\.?\/)[^']+'/u.test(msg);
+  }
+
+  // TS7026: JSX element implicitly has type 'any' — @types/react 미설치 환경 노이즈
+  if (diag.code === 7026) return true;
+
+  return false;
+}
+
+/**
  * pnpm monorepo 환경을 고려하여 workspace별 tsconfig.json을 모두 탐색한다.
  * 각 tsconfig 영역에 변경된 파일이 포함된 경우에만 타입체크를 실행한다.
  */
@@ -78,13 +98,8 @@ export async function runTypecheck(diffMap: DiffMap): Promise<Finding[]> {
     for (const diag of diagnostics) {
       if (!diag.file) continue;
 
-      // TS2307: "Cannot find module 'X'" — 외부 패키지(non-relative)는 deps 미설치 환경
-      // 노이즈이므로 건너뜀. 로컬 상대 경로 import 오류는 실제 코드 문제이므로 유지.
-      if (diag.code === 2307) {
-        const msgText = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
-        const isExternalPackage = /Cannot find module '(?!\.\.?\/)[^']+'/u.test(msgText);
-        if (isExternalPackage) continue;
-      }
+      // 환경 미설치로 인한 노이즈 필터링 (실제 코드 로직 오류가 아님)
+      if (isEnvironmentNoise(diag)) continue;
 
       const absFile = diag.file.fileName;
       const relPath = path.relative(process.cwd(), absFile);
