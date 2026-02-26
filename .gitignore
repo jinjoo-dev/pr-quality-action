@@ -1,0 +1,3 @@
+node_modules/
+dist/
+# action-dist/는 GitHub Actions 실행을 위해 커밋 대상에 포함해야 한다

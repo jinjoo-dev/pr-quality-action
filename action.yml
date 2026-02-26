@@ -1,0 +1,23 @@
+name: 'PR Quality Check'
+description: 'TypeScript 타입체크 및 ESLint를 diff 기반으로 실행하여 PR에 코멘트를 남기는 1차 필터 Action'
+author: 'your-org'
+
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  github-token:
+    description: 'GitHub token. PR 코멘트 작성을 위해 pull-requests: write 권한이 필요합니다.'
+    required: true
+    default: ${{ github.token }}
+
+outputs:
+  blocking-count:
+    description: '발견된 Blocking 항목 수'
+  warning-count:
+    description: '발견된 Warning 항목 수'
+
+runs:
+  using: 'node20'
+  main: 'action-dist/index.js'

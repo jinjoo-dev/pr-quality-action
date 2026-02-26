@@ -1,0 +1,56 @@
+name: PR Quality Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# PR 코멘트 작성 및 코드 읽기 권한
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  quality-check:
+    name: TypeScript & ESLint (diff 기반)
+    runs-on: ubuntu-latest
+
+    steps:
+      # fetch-depth: 0 → base SHA와 head SHA 간 git diff 실행에 전체 히스토리 필요
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # pnpm monorepo 환경 지원
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      # 검사 대상 프로젝트의 의존성 설치
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+
+      # PR Quality Action 실행
+      - name: Run PR Quality Check
+        uses: your-org/pr-quality-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
