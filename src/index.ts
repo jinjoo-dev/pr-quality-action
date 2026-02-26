@@ -24,13 +24,28 @@ async function run(): Promise<void> {
   const token = core.getInput('github-token', { required: true });
   const pr = github.context.payload.pull_request;
 
-  if (!pr) {
-    core.setFailed('이 Action은 pull_request 이벤트에서만 실행할 수 있습니다.');
+  // pull_request 컨텍스트가 없으면 (e.g. issue_comment 이벤트) 입력값에서 폴백
+  const base: string =
+    (pr?.base as { sha: string } | undefined)?.sha ?? core.getInput('base-sha');
+  const head: string =
+    (pr?.head as { sha: string } | undefined)?.sha ?? core.getInput('head-sha');
+  const prNumber: number =
+    (pr?.number as number | undefined) ??
+    (core.getInput('pr-number') ? parseInt(core.getInput('pr-number'), 10) : NaN);
+
+  if (!base || !head) {
+    core.setFailed(
+      'pull_request 컨텍스트가 없습니다. base-sha와 head-sha 입력값을 제공해주세요.',
+    );
     return;
   }
 
-  const base: string = (pr.base as { sha: string }).sha;
-  const head: string = (pr.head as { sha: string }).sha;
+  if (isNaN(prNumber)) {
+    core.setFailed(
+      'pull_request 컨텍스트가 없습니다. pr-number 입력값을 제공해주세요.',
+    );
+    return;
+  }
 
   core.info(`[run] diff 분석 시작: ${base}...${head}`);
 
@@ -69,7 +84,7 @@ async function run(): Promise<void> {
 
   // ── Step 4: PR 코멘트 작성 ──────────────────────────────────────────────
   try {
-    await postComments(result, token);
+    await postComments(result, token, prNumber, head);
   } catch (err) {
     core.warning(
       `[run] PR 코멘트 작성 실패: ${err instanceof Error ? err.message : String(err)}`,

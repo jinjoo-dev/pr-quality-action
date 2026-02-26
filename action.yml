@@ -11,6 +11,15 @@ inputs:
     description: 'GitHub token. PR 코멘트 작성을 위해 pull-requests: write 권한이 필요합니다.'
     required: true
     default: ${{ github.token }}
+  base-sha:
+    description: 'Base commit SHA. issue_comment 이벤트처럼 pull_request 컨텍스트가 없을 때 필요합니다.'
+    required: false
+  head-sha:
+    description: 'Head commit SHA. issue_comment 이벤트처럼 pull_request 컨텍스트가 없을 때 필요합니다.'
+    required: false
+  pr-number:
+    description: 'PR 번호. issue_comment 이벤트처럼 pull_request 컨텍스트가 없을 때 필요합니다.'
+    required: false
 
 outputs:
   blocking-count:

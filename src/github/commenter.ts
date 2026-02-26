@@ -125,27 +125,34 @@ async function postLineComments(
 /**
  * PR에 요약 코멘트와 Blocking 라인 코멘트를 작성한다.
  *
- * @param result  - 집계된 검사 결과
- * @param token   - GitHub token (pull-requests: write 권한 필요)
+ * @param result     - 집계된 검사 결과
+ * @param token      - GitHub token (pull-requests: write 권한 필요)
+ * @param pullNumber - PR 번호. 미제공 시 pull_request 컨텍스트에서 읽음
+ * @param commitId   - Head commit SHA. 미제공 시 pull_request 컨텍스트에서 읽음
  */
 export async function postComments(
   result: AggregatedResult,
   token: string,
+  pullNumber?: number,
+  commitId?: string,
 ): Promise<void> {
   const octokit = getOctokit(token);
   const { owner, repo } = context.repo;
   const pr = context.payload.pull_request;
 
-  if (!pr) {
-    throw new Error('[commenter] pull_request context가 없습니다.');
+  const resolvedPullNumber = pullNumber ?? (pr?.number as number | undefined);
+  const resolvedCommitId = commitId ?? (pr?.head as { sha: string } | undefined)?.sha;
+
+  if (!resolvedPullNumber || !resolvedCommitId) {
+    throw new Error('[commenter] PR 번호 또는 commit SHA를 확인할 수 없습니다. pullNumber/commitId 파라미터를 전달하거나 pull_request 이벤트에서 실행하세요.');
   }
 
-  const pullNumber = pr.number as number;
-  const commitId = (pr.head as { sha: string }).sha;
+  const pullNumber_ = resolvedPullNumber;
+  const commitId_ = resolvedCommitId;
 
   // 1. 요약 코멘트 생성 또는 업데이트
   const summaryBody = formatSummary(result);
-  await upsertSummaryComment(octokit, owner, repo, pullNumber, summaryBody);
+  await upsertSummaryComment(octokit, owner, repo, pullNumber_, summaryBody);
 
   // 2. Blocking 항목 라인 코멘트
   if (result.blocking.length > 0) {
@@ -153,8 +160,8 @@ export async function postComments(
       octokit,
       owner,
       repo,
-      pullNumber,
-      commitId,
+      pullNumber_,
+      commitId_,
       result.blocking,
     );
   }
