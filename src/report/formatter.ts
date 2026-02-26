@@ -6,7 +6,75 @@ import type { AggregatedResult, Finding } from '../types';
  */
 export const BOT_MARKER = '<!-- pr-quality-action -->';
 
-/** 각 Finding을 Markdown 목록 항목으로 변환 */
+/**
+ * 요약 코멘트 렌더링용 그룹.
+ * 같은 파일·같은 규칙의 연속 라인들을 묶어 한 줄로 표시한다.
+ */
+interface FindingGroup {
+  tool: string;
+  ruleId: string;
+  file: string;
+  startLine?: number;
+  endLine?: number;
+  count: number;
+  message: string;
+  note?: string;
+}
+
+/**
+ * 정렬된 Finding[]을 연속 라인 그룹으로 묶는다.
+ *
+ * 그룹 조건: 같은 파일 + 같은 ruleId + 라인 간격 ≤ 2
+ * (간격을 1이 아닌 2로 허용하면 인접한 블록도 자연스럽게 묶임)
+ */
+function groupFindings(findings: Finding[]): FindingGroup[] {
+  const groups: FindingGroup[] = [];
+
+  for (const f of findings) {
+    const last = groups[groups.length - 1];
+    const isConsecutive =
+      last !== undefined &&
+      last.file === f.file &&
+      last.ruleId === f.ruleId &&
+      last.tool === f.tool &&
+      f.line != null &&
+      last.endLine != null &&
+      f.line - last.endLine <= 2;
+
+    if (isConsecutive && last !== undefined) {
+      last.endLine = f.line;
+      last.count += 1;
+    } else {
+      groups.push({
+        tool: f.tool,
+        ruleId: f.ruleId,
+        file: f.file,
+        startLine: f.line,
+        endLine: f.line,
+        count: 1,
+        message: f.message,
+        note: f.note,
+      });
+    }
+  }
+
+  return groups;
+}
+
+/** FindingGroup을 Markdown 목록 항목으로 변환 */
+function groupLine(g: FindingGroup): string {
+  let loc = '';
+  if (g.startLine != null) {
+    loc = g.startLine === g.endLine
+      ? `:${g.startLine}`
+      : `:${g.startLine}-${g.endLine}`;
+  }
+  const countNote = g.count > 1 ? ` _(${g.count}건)_` : '';
+  const note = g.note ? `\n  > ${g.note}` : '';
+  return `- \`${g.file}${loc}\` **[${g.tool}/${g.ruleId}]** ${g.message}${countNote}${note}`;
+}
+
+/** 각 Finding을 Markdown 목록 항목으로 변환 (라인 코멘트용, 그룹화 없음) */
 function findingLine(f: Finding): string {
   const loc = f.line != null ? `:${f.line}${f.col != null ? `:${f.col}` : ''}` : '';
   const note = f.note ? `\n  > ${f.note}` : '';
@@ -39,20 +107,22 @@ export function formatSummary(result: AggregatedResult): string {
   ];
 
   if (blocking.length > 0) {
+    const blockingGroups = groupFindings(blocking);
     lines.push('### Blocking');
     lines.push('');
-    for (const f of blocking) {
-      lines.push(findingLine(f));
+    for (const g of blockingGroups) {
+      lines.push(groupLine(g));
     }
     lines.push('');
   }
 
   if (warnings.length > 0) {
+    const warningGroups = groupFindings(warnings);
     lines.push('<details>');
     lines.push(`<summary>Warning (${warnings.length}건 — 클릭하여 펼치기)</summary>`);
     lines.push('');
-    for (const f of warnings) {
-      lines.push(findingLine(f));
+    for (const g of warningGroups) {
+      lines.push(groupLine(g));
     }
     lines.push('');
     lines.push('</details>');
