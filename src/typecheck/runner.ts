@@ -81,15 +81,23 @@ export async function runTypecheck(diffMap: DiffMap): Promise<Finding[]> {
     );
 
     // skipLibCheck 강제 활성화: 외부 라이브러리 .d.ts 오류 무시
-    // lib에 DOM 계열 추가: fetch / JSON 등 Web API 글로벌이 없어서 발생하는
-    // 환경 노이즈를 방지. 대상 프로젝트 tsconfig가 DOM을 빠뜨린 경우 대응.
+    //
+    // lib 처리 전략:
+    //   - parsed.options.lib === undefined → tsconfig에서 lib를 명시하지 않은 것.
+    //     TypeScript가 target 기반 기본 lib를 사용하도록 undefined 그대로 유지.
+    //     (임의로 덮어쓰면 ES 기본 타입이 모두 사라져 대규모 오탐이 발생함)
+    //   - parsed.options.lib !== undefined → 명시된 lib에 DOM 계열이 없으면 보완.
+    //     fetch / document 등 DOM 글로벌 미설정 환경 노이즈 방지.
     const DOM_LIBS = ['lib.dom.d.ts', 'lib.dom.iterable.d.ts'];
-    const existingLib = parsed.options.lib ?? [];
-    const mergedLib = [...new Set([...existingLib, ...DOM_LIBS])];
+    const patchedLib =
+      parsed.options.lib !== undefined
+        ? [...new Set([...parsed.options.lib, ...DOM_LIBS])]
+        : undefined;
+
     const programOptions: ts.CompilerOptions = {
       ...parsed.options,
       skipLibCheck: true,
-      lib: mergedLib,
+      ...(patchedLib !== undefined && { lib: patchedLib }),
     };
 
     const program = ts.createProgram(parsed.fileNames, programOptions);
