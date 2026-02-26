@@ -4,6 +4,8 @@
 
 PR diff 기반으로 TypeScript 타입체크 및 ESLint를 실행하고 결과를 PR 코멘트로 남기는 GitHub Custom Action.
 
+**검출 항목 상세** → [docs/checks.md](./docs/checks.md)
+
 ## 사용법
 
 ```yaml
