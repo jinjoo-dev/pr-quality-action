@@ -1,6 +1,47 @@
 import { ESLint } from 'eslint';
 import path from 'path';
+import fs from 'fs';
 import type { DiffMap, Finding } from '../types';
+
+/**
+ * 프로젝트 루트에서 ESLint 설정 파일 형식을 감지한다.
+ *
+ * ESLint 9는 flat config (eslint.config.*) 를 기본으로 사용한다.
+ * flat config 파일이 없고 legacy (.eslintrc.*) 파일만 있으면
+ * ESLINT_USE_FLAT_CONFIG=false 를 설정해 legacy 모드로 강제 전환한다.
+ */
+function detectAndApplyEslintConfigMode(cwd: string): 'flat' | 'legacy' | 'none' {
+  const flatConfigs = [
+    'eslint.config.js',
+    'eslint.config.mjs',
+    'eslint.config.cjs',
+    'eslint.config.ts',
+  ];
+  const legacyConfigs = [
+    '.eslintrc.js',
+    '.eslintrc.cjs',
+    '.eslintrc.mjs',
+    '.eslintrc.json',
+    '.eslintrc.yaml',
+    '.eslintrc.yml',
+    '.eslintrc',
+  ];
+
+  const hasFlatConfig = flatConfigs.some((f) => fs.existsSync(path.join(cwd, f)));
+  if (hasFlatConfig) {
+    delete process.env.ESLINT_USE_FLAT_CONFIG;
+    return 'flat';
+  }
+
+  const hasLegacyConfig = legacyConfigs.some((f) => fs.existsSync(path.join(cwd, f)));
+  if (hasLegacyConfig) {
+    // ESLint 9에서 legacy .eslintrc.* 를 로드하려면 이 플래그가 필요
+    process.env.ESLINT_USE_FLAT_CONFIG = 'false';
+    return 'legacy';
+  }
+
+  return 'none';
+}
 
 /**
  * ESLint Node API를 사용하여 변경된 파일만 lint를 실행한다.
@@ -15,18 +56,35 @@ export async function runEslint(diffMap: DiffMap): Promise<Finding[]> {
 
   if (filePaths.length === 0) return findings;
 
-  // ESLint 인스턴스 생성
-  // 프로젝트에 eslint.config.js / .eslintrc 등이 있으면 자동으로 사용된다
-  const eslint = new ESLint({
-    // ignore 패턴도 프로젝트 설정을 그대로 사용
-    errorOnUnmatchedPattern: false,
-  });
+  const cwd = process.cwd();
+  const configMode = detectAndApplyEslintConfigMode(cwd);
 
-  // 이미 ESLint ignore 설정에 해당하는 파일 제거
+  if (configMode === 'none') {
+    console.log('[eslint] ESLint 설정 파일을 찾지 못했습니다. 검사를 건너뜁니다.');
+    return findings;
+  }
+
+  console.log(`[eslint] 설정 모드: ${configMode}`);
+
+  let eslint: ESLint;
+  try {
+    eslint = new ESLint({ errorOnUnmatchedPattern: false, cwd });
+  } catch (err) {
+    console.warn(
+      `[eslint] ESLint 인스턴스 생성 실패 (설정 파일 오류일 수 있음): ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return findings;
+  }
+
+  // ESLint ignore 설정에 해당하는 파일 제거
   const lintableFiles: string[] = [];
   for (const file of filePaths) {
-    const ignored = await eslint.isPathIgnored(file);
-    if (!ignored) lintableFiles.push(file);
+    try {
+      const ignored = await eslint.isPathIgnored(file);
+      if (!ignored) lintableFiles.push(file);
+    } catch {
+      lintableFiles.push(file);
+    }
   }
 
   if (lintableFiles.length === 0) {
@@ -35,20 +93,26 @@ export async function runEslint(diffMap: DiffMap): Promise<Finding[]> {
   }
 
   console.log(`[eslint] ${lintableFiles.length}개 파일 검사 중...`);
-  const results = await eslint.lintFiles(lintableFiles);
+
+  let results: ESLint.LintResult[];
+  try {
+    results = await eslint.lintFiles(lintableFiles);
+  } catch (err) {
+    console.warn(
+      `[eslint] lintFiles 실패: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return findings;
+  }
 
   for (const result of results) {
-    // ESLint가 반환하는 절대 경로를 repo 기준 상대 경로로 변환
-    const relPath = path.relative(process.cwd(), result.filePath);
+    const relPath = path.relative(cwd, result.filePath);
     const changedLines = diffMap.get(relPath);
 
     if (!changedLines) continue;
 
     for (const msg of result.messages) {
-      // diff 기반 필터링: 변경된 라인에 포함된 오류만 수집
       if (msg.line === undefined || !changedLines.has(msg.line)) continue;
 
-      // severity: 2 = error(BLOCKING), 1 = warn(WARNING)
       const severity = msg.severity === 2 ? 'BLOCKING' : 'WARNING';
 
       findings.push({
@@ -63,5 +127,6 @@ export async function runEslint(diffMap: DiffMap): Promise<Finding[]> {
     }
   }
 
+  console.log(`[eslint] 완료 — ${findings.length}개 finding`);
   return findings;
 }
