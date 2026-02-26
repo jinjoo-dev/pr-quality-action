@@ -1,16 +1,27 @@
-import { ESLint } from 'eslint';
+import { spawnSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import type { DiffMap, Finding } from '../types';
 
+/** ESLint JSON 포맷 출력 타입 */
+interface EslintJsonResult {
+  filePath: string;
+  messages: Array<{
+    ruleId: string | null;
+    severity: number;
+    message: string;
+    line: number;
+    column: number;
+  }>;
+}
+
 /**
  * 프로젝트 루트에서 ESLint 설정 파일 형식을 감지한다.
  *
- * ESLint 9는 flat config (eslint.config.*) 를 기본으로 사용한다.
- * flat config 파일이 없고 legacy (.eslintrc.*) 파일만 있으면
- * ESLINT_USE_FLAT_CONFIG=false 를 설정해 legacy 모드로 강제 전환한다.
+ * flat config 없이 legacy .eslintrc.* 만 있으면 'legacy' 반환.
+ * 서브프로세스 실행 시 ESLINT_USE_FLAT_CONFIG=false 환경변수로 전달해야 한다.
  */
-function detectAndApplyEslintConfigMode(cwd: string): 'flat' | 'legacy' | 'none' {
+function detectConfigMode(cwd: string): 'flat' | 'legacy' | 'none' {
   const flatConfigs = [
     'eslint.config.js',
     'eslint.config.mjs',
@@ -27,28 +38,24 @@ function detectAndApplyEslintConfigMode(cwd: string): 'flat' | 'legacy' | 'none'
     '.eslintrc',
   ];
 
-  const hasFlatConfig = flatConfigs.some((f) => fs.existsSync(path.join(cwd, f)));
-  if (hasFlatConfig) {
-    delete process.env.ESLINT_USE_FLAT_CONFIG;
-    return 'flat';
-  }
-
-  const hasLegacyConfig = legacyConfigs.some((f) => fs.existsSync(path.join(cwd, f)));
-  if (hasLegacyConfig) {
-    // ESLint 9에서 legacy .eslintrc.* 를 로드하려면 이 플래그가 필요
-    process.env.ESLINT_USE_FLAT_CONFIG = 'false';
-    return 'legacy';
-  }
-
+  if (flatConfigs.some((f) => fs.existsSync(path.join(cwd, f)))) return 'flat';
+  if (legacyConfigs.some((f) => fs.existsSync(path.join(cwd, f)))) return 'legacy';
   return 'none';
 }
 
 /**
- * ESLint Node API를 사용하여 변경된 파일만 lint를 실행한다.
- * 결과는 diff 기반 필터링을 거쳐, 변경된 라인에 해당하는 오류만 반환한다.
+ * 프로젝트에 설치된 ESLint 바이너리를 서브프로세스로 실행한다.
  *
- * severity 2 → BLOCKING
- * severity 1 → WARNING
+ * 번들된 ESLint Node API 대신 서브프로세스를 사용하는 이유:
+ *   ncc CJS 번들 환경에서 ESLint가 eslint.config.mjs 등을 동적 import() 할 때
+ *   `?mtime=...` 캐시버스팅 URL 처리에 실패하는 문제가 있다.
+ *   프로젝트 자체 바이너리를 쓰면 ESLint가 자신의 Node.js 컨텍스트에서
+ *   설정을 로드하므로 이 문제가 발생하지 않는다.
+ *
+ * ESLint exit code:
+ *   0 → 오류 없음
+ *   1 → lint 오류 발견 (stdout에 JSON 있음)
+ *   2 → fatal 오류 (설정 파일 파싱 실패 등)
  */
 export async function runEslint(diffMap: DiffMap): Promise<Finding[]> {
   const findings: Finding[] = [];
@@ -57,68 +64,60 @@ export async function runEslint(diffMap: DiffMap): Promise<Finding[]> {
   if (filePaths.length === 0) return findings;
 
   const cwd = process.cwd();
-  const configMode = detectAndApplyEslintConfigMode(cwd);
 
+  const eslintBin = path.join(cwd, 'node_modules', '.bin', 'eslint');
+  if (!fs.existsSync(eslintBin)) {
+    console.log('[eslint] node_modules/.bin/eslint를 찾을 수 없습니다. 검사를 건너뜁니다.');
+    return findings;
+  }
+
+  const configMode = detectConfigMode(cwd);
   if (configMode === 'none') {
     console.log('[eslint] ESLint 설정 파일을 찾지 못했습니다. 검사를 건너뜁니다.');
     return findings;
   }
 
-  console.log(`[eslint] 설정 모드: ${configMode}`);
+  console.log(`[eslint] 설정 모드: ${configMode}, 파일 ${filePaths.length}개 검사 중...`);
 
-  let eslint: ESLint;
-  try {
-    eslint = new ESLint({ errorOnUnmatchedPattern: false, cwd });
-  } catch (err) {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (configMode === 'legacy') {
+    env.ESLINT_USE_FLAT_CONFIG = 'false';
+  }
+
+  const result = spawnSync(
+    eslintBin,
+    ['--format', 'json', '--no-error-on-unmatched-pattern', ...filePaths],
+    { cwd, encoding: 'utf-8', env, maxBuffer: 10 * 1024 * 1024 },
+  );
+
+  if (result.error || result.status === 2) {
     console.warn(
-      `[eslint] ESLint 인스턴스 생성 실패 (설정 파일 오류일 수 있음): ${err instanceof Error ? err.message : String(err)}`,
+      `[eslint] ESLint 실행 실패 (exit ${result.status ?? 'error'}): ${result.error?.message ?? result.stderr?.slice(0, 300) ?? ''}`,
     );
     return findings;
   }
 
-  // ESLint ignore 설정에 해당하는 파일 제거
-  const lintableFiles: string[] = [];
-  for (const file of filePaths) {
-    try {
-      const ignored = await eslint.isPathIgnored(file);
-      if (!ignored) lintableFiles.push(file);
-    } catch {
-      lintableFiles.push(file);
-    }
-  }
-
-  if (lintableFiles.length === 0) {
-    console.log('[eslint] 검사할 파일 없음 (모두 ignore)');
-    return findings;
-  }
-
-  console.log(`[eslint] ${lintableFiles.length}개 파일 검사 중...`);
-
-  let results: ESLint.LintResult[];
+  let lintResults: EslintJsonResult[];
   try {
-    results = await eslint.lintFiles(lintableFiles);
-  } catch (err) {
-    console.warn(
-      `[eslint] lintFiles 실패: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    lintResults = JSON.parse(result.stdout) as EslintJsonResult[];
+  } catch {
+    console.warn(`[eslint] JSON 파싱 실패 — stdout: ${result.stdout.slice(0, 200)}`);
     return findings;
   }
 
-  for (const result of results) {
-    const relPath = path.relative(cwd, result.filePath);
+  for (const fileResult of lintResults) {
+    const relPath = path.relative(cwd, fileResult.filePath);
     const changedLines = diffMap.get(relPath);
 
     if (!changedLines) continue;
 
-    for (const msg of result.messages) {
-      if (msg.line === undefined || !changedLines.has(msg.line)) continue;
-
-      const severity = msg.severity === 2 ? 'BLOCKING' : 'WARNING';
+    for (const msg of fileResult.messages) {
+      if (!changedLines.has(msg.line)) continue;
 
       findings.push({
         tool: 'eslint',
         ruleId: msg.ruleId ?? 'unknown',
-        severity,
+        severity: msg.severity === 2 ? 'BLOCKING' : 'WARNING',
         file: relPath,
         line: msg.line,
         col: msg.column,
