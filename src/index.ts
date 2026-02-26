@@ -3,6 +3,7 @@ import * as github from '@actions/github';
 import { buildDiffMap } from './git/diff';
 import { runTypecheck } from './typecheck/runner';
 import { runEslint } from './eslint/runner';
+import { runBuiltinEslint } from './eslint/builtin-runner';
 import { aggregate } from './report/aggregator';
 import { postComments } from './github/commenter';
 import type { Runner } from './types';
@@ -62,7 +63,7 @@ async function run(): Promise<void> {
 
   // ── Step 2: Runner들 병렬 실행 ──────────────────────────────────────────
   // 향후 runner를 추가할 때는 이 배열에만 추가하면 된다
-  const runners: Runner[] = [runTypecheck, runEslint];
+  const runners: Runner[] = [runTypecheck, runEslint, runBuiltinEslint];
 
   const findingArrays = await Promise.all(
     runners.map((runner) =>
