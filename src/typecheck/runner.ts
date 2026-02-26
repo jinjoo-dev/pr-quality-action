@@ -60,11 +60,25 @@ export async function runTypecheck(diffMap: DiffMap): Promise<Finding[]> {
       `[typecheck] ${tsconfigPath} — 변경 파일 ${relevantChanged.length}개 포함`,
     );
 
-    const program = ts.createProgram(parsed.fileNames, parsed.options);
+    // skipLibCheck 강제 활성화: 외부 라이브러리 .d.ts 오류 무시
+    const programOptions: ts.CompilerOptions = {
+      ...parsed.options,
+      skipLibCheck: true,
+    };
+
+    const program = ts.createProgram(parsed.fileNames, programOptions);
     const diagnostics = ts.getPreEmitDiagnostics(program);
 
     for (const diag of diagnostics) {
       if (!diag.file) continue;
+
+      // TS2307: "Cannot find module 'X'" — 외부 패키지(non-relative)는 deps 미설치 환경
+      // 노이즈이므로 건너뜀. 로컬 상대 경로 import 오류는 실제 코드 문제이므로 유지.
+      if (diag.code === 2307) {
+        const msgText = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
+        const isExternalPackage = /Cannot find module '(?!\.\.?\/)[^']+'/u.test(msgText);
+        if (isExternalPackage) continue;
+      }
 
       const absFile = diag.file.fileName;
       const relPath = path.relative(process.cwd(), absFile);
